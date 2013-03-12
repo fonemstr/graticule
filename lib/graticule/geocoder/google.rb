@@ -13,6 +13,15 @@ module Graticule #:nodoc:
     class Google < Base
       # http://www.google.com/apis/maps/documentation/#Geocoding_HTTP_Request
 
+      PRECISION = {
+        :unknown => Precision::Unknown,      # Unknown location.
+        :country => Precision::Country,      # Country level accuracy.
+        :region => Precision::Region,       # Region (state, province, prefecture, etc.) level accuracy
+        :locality => Precision::Locality,     # Town (city, village) level accuracy.
+        :postal_code => Precision::PostalCode,   # Post code (zip code) level accuracy.
+        :street_address  => Precision::Street,       # Street level accuracy.
+      }
+
       def initialize
         @url = URI.parse 'http://maps.googleapis.com/maps/api/geocode/xml'
       end
@@ -28,6 +37,14 @@ module Graticule #:nodoc:
         element :name, String, :tag => '.|.//text()'
       end
 
+      class Result
+        include HappyMapper
+        tag 'result'
+        has_many :types, Type
+        element :formatted_address, String
+      end
+
+
       class AddressComponent
         include HappyMapper
         tag 'address_component'
@@ -39,20 +56,64 @@ module Graticule #:nodoc:
       class Geometry
         include HappyMapper
         tag 'location'
-        element :lat, Float, :tag => 'lat'
-        element :lng, Float, :tag => 'lng'
+        element :lat, Float
+        element :lng, Float
       end
 
       class GeocodeResponse
         include HappyMapper
         tag 'GeocodeResponse'
+        element :code, String, :tag => 'status'
+        
         has_many :address_components, AddressComponent
         has_one :location, Geometry
-
-        element :code, String, :tag => 'status'
-
+        has_one :result, Result
+       
         def get_type(type)
           address_components.detect {|component|  component.types.first.name == type } 
+        end
+
+        def get_result_type
+          result.types.first.name
+        end
+
+        def street
+          route = get_type('route')
+          route.presence ? route.short_name : ''
+        end
+
+        def locality
+          locality = get_type('locality')
+          locality.presence ? locality.short_name : ''
+        end
+
+        def region
+          region = get_type('administrative_area_level_1')
+          region.presence ? region.short_name : ''
+        end
+
+        def postal_code
+          postal_code = get_type('postal_code')
+          postal_code.presence ? postal_code.short_name : ''
+        end
+
+        def country
+          country = get_type('country')
+          country.presence ? country.short_name : ''
+        end
+
+        def latitude
+          location.lat
+        end
+
+        def longitude
+          location.lng
+        end
+
+        def precision
+          precision = get_result_type
+          Rails.logger.info "#{precision}"
+          PRECISION[precision.to_sym] || PRECISION[:locality]  
         end
       end
 
@@ -62,14 +123,14 @@ module Graticule #:nodoc:
 
       def parse_response(response) #:nodoc:
         Location.new(
-          :latitude    => response.location.lat,
-          :longitude   => response.location.lng,
-          :street      => response.get_type('route').short_name,
-          :locality    => response.get_type('locality').short_name,
-          :region      => response.get_type('administrative_area_level_1').short_name,
-          :postal_code => response.get_type('postal_code').short_name,
-          :country     => response.get_type('country').short_name,
-          :precision   => :unknown
+          :latitude    => response.latitude,
+          :longitude   => response.longitude,
+          :street      => response.street,
+          :locality    => response.locality,
+          :region      => response.region,
+          :postal_code => response.postal_code,
+          :country     => response.country,
+          :precision   => response.precision
         )
       end
 
