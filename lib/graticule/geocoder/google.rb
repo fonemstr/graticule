@@ -33,7 +33,7 @@ module Graticule #:nodoc:
 
       # Locates +address+ returning a Location
       def locate(address)
-        get :q => address.is_a?(String) ? address : location_from_params(address).to_s
+        get :address => address.is_a?(String) ? address : location_from_params(address).to_s
       end
 
     private
