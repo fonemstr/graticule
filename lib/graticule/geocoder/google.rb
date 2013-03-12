@@ -75,9 +75,6 @@ module Graticule #:nodoc:
         def get_type(type)
           address_components.detect {|component|  component.types.first.name == type } 
         end
-
-      end
-
       end
 
       def prepare_response(xml)
