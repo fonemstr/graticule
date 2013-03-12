@@ -28,8 +28,7 @@ module Graticule #:nodoc:
       }
 
       def initialize(key)
-        @key = key
-        @url = URI.parse 'http://maps.google.com/maps/geo'
+        @url = URI.parse 'http://maps.googleapis.com/maps/api/geocode/xml'
       end
 
       # Locates +address+ returning a Location
@@ -38,93 +37,88 @@ module Graticule #:nodoc:
       end
 
     private
-      class Address
+      class Type
         include HappyMapper
-        tag 'AddressDetails'
-        namespace 'urn:oasis:names:tc:ciq:xsdschema:xAL:2.0'
+        element :name, String, :tag => '.|.//text()'
+      end
+      
+      class AddressComponent
+        include HappyMapper
+        tag 'address_component'
 
-        attribute :accuracy, Integer, :tag => 'Accuracy'
+        attribute :short_name, String
+        attribute :long_name, String
+        has_many :types, Type
       end
 
-      class Placemark
-        include HappyMapper
-        tag 'Placemark'
-        element :coordinates, String, :deep => true
-        has_one :address, Address
-
-        attr_reader :longitude, :latitude
-
-        with_options :deep => true, :namespace => 'urn:oasis:names:tc:ciq:xsdschema:xAL:2.0' do |map|
-          map.element :street,      String, :tag => 'ThoroughfareName'
-          map.element :locality,    String, :tag => 'LocalityName'
-          map.element :region,      String, :tag => 'AdministrativeAreaName'
-          map.element :postal_code, String, :tag => 'PostalCodeNumber'
-          map.element :country,     String, :tag => 'CountryNameCode'
-        end
-
-        def coordinates=(coordinates)
-          @longitude, @latitude, _ = coordinates.split(',').map { |v| v.to_f }
-        end
-
-        def accuracy
-          address.accuracy if address
-        end
-
-        def precision
-          PRECISION[accuracy] || :unknown
-        end
+      class GeoLocation
+        tag 'location'
+        attribute :lat, Float
+        attribute :long, Float
       end
 
-      class Response
+      class Geometry
         include HappyMapper
-        tag 'Response'
-        element :code, Integer, :tag => 'code', :deep => true
-        has_many :placemarks, Placemark
+        tag 'geometry'
+        has_one :location, GeoLocation
+      end
+    
+      class GeocodeResponse
+        include HappyMapper
+        tag 'GeocodeResponse'
+        
+        element :code, String, :tag => 'status'
+        
+        has_one :geo_location, Geometry
+        has_many :address_components, AddressComponent
+
+        def get_type(type)
+          address_components.detect {|component|  component.types.first.name == type } 
+        end
+
+      end
+
       end
 
       def prepare_response(xml)
-        Response.parse(xml, :single => true)
+        GeocodeResponse.parse(xml, :single => true)
       end
 
       def parse_response(response) #:nodoc:
-        result = response.placemarks.first
+        #result = response.placemarks.first
         Location.new(
-          :latitude    => result.latitude,
-          :longitude   => result.longitude,
-          :street      => result.street,
-          :locality    => result.locality,
-          :region      => result.region,
-          :postal_code => result.postal_code,
-          :country     => result.country,
-          :precision   => result.precision
+          :latitude    => reponse.geo_location.location.lat,
+          :longitude   => response.geo_location.location.lng,
+          :street      => response.get_type('route').short_name,
+          :locality    => response.get_type('locality').short_name,
+          :region      => response.get_type('administrative_area_level_1').short_name,
+          :postal_code => response.get_type('postal_code').short_name,
+          :country     => response.get_type('country').short_name,
+          :precision   => :unknown
         )
       end
 
       # Extracts and raises an error from +xml+, if any.
       def check_error(response) #:nodoc:
         case response.code
-        when 200 then # ignore, ok
-        when 500 then
-          raise Error, 'server error'
-        when 601 then
+        when 'OK' then # ignore, ok
+        when 'INVALID_REQUEST' then
           raise AddressError, 'missing address'
-        when 602 then
-          raise AddressError, 'unknown address'
-        when 603 then
+        when 'ZERO_RESULTS' then
           raise AddressError, 'unavailable address'
-        when 610 then
-          raise CredentialsError, 'invalid key'
-        when 620 then
+        when 'REQUEST_DENIED' then
+          raise CredentialsError, 'request was denied'
+        when 'OVER_QUERY_LIMIT' then
           raise CredentialsError, 'too many queries'
         else
-          raise Error, "unknown error #{response.code}"
+          raise Error, "#{response.code}"
         end
       end
 
       # Creates a URL from the Hash +params+.
       # sets the output type to 'xml'.
       def make_url(params) #:nodoc:
-        super params.merge(:key => @key, :oe => 'utf8', :output => 'xml', :sensor => false)
+        super params.merge(:sensor => false)
       end
     end
   end
