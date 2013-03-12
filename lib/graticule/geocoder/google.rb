@@ -55,7 +55,7 @@ module Graticule #:nodoc:
         include HappyMapper
         tag 'location'
         attribute :lat, Float
-        attribute :long, Float
+        attribute :lng, Float
       end
 
       class Geometry
