@@ -13,21 +13,7 @@ module Graticule #:nodoc:
     class Google < Base
       # http://www.google.com/apis/maps/documentation/#Geocoding_HTTP_Request
 
-      # http://www.google.com/apis/maps/documentation/reference.html#GGeoAddressAccuracy
-      PRECISION = {
-        0 => Precision::Unknown,      # Unknown location.
-        1 => Precision::Country,      # Country level accuracy.
-        2 => Precision::Region,       # Region (state, province, prefecture, etc.) level accuracy.
-        3 => Precision::Region,       # Sub-region (county, municipality, etc.) level accuracy.
-        4 => Precision::Locality,     # Town (city, village) level accuracy.
-        5 => Precision::PostalCode,   # Post code (zip code) level accuracy.
-        6 => Precision::Street,       # Street level accuracy.
-        7 => Precision::Street,       # Intersection level accuracy.
-        8 => Precision::Address,      # Address level accuracy.
-        9 => Precision::Premise       # Premise (building name, property name, shopping center, etc.) level accuracy.
-      }
-
-      def initialize(key)
+      def initialize
         @url = URI.parse 'http://maps.googleapis.com/maps/api/geocode/xml'
       end
 
@@ -41,37 +27,29 @@ module Graticule #:nodoc:
         include HappyMapper
         element :name, String, :tag => '.|.//text()'
       end
-      
+
       class AddressComponent
         include HappyMapper
         tag 'address_component'
-
-        attribute :short_name, String
-        attribute :long_name, String
         has_many :types, Type
-      end
-
-      class GeoLocation
-        include HappyMapper
-        tag 'location'
-        attribute :lat, Float
-        attribute :lng, Float
+        element :short_name, String
+        element :long_name, String
       end
 
       class Geometry
         include HappyMapper
-        tag 'geometry'
-        has_one :location, GeoLocation
+        tag 'location'
+        element :lat, Float, :tag => 'lat'
+        element :lng, Float, :tag => 'lng'
       end
-    
+
       class GeocodeResponse
         include HappyMapper
         tag 'GeocodeResponse'
-        
-        element :code, String, :tag => 'status'
-        
-        has_one :geo_location, Geometry
         has_many :address_components, AddressComponent
+        has_one :location, Geometry
+
+        element :code, String, :tag => 'status'
 
         def get_type(type)
           address_components.detect {|component|  component.types.first.name == type } 
@@ -83,10 +61,9 @@ module Graticule #:nodoc:
       end
 
       def parse_response(response) #:nodoc:
-        #result = response.placemarks.first
         Location.new(
-          :latitude    => response.geo_location.location.lat,
-          :longitude   => response.geo_location.location.lng,
+          :latitude    => response.location.lat,
+          :longitude   => response.location.lng,
           :street      => response.get_type('route').short_name,
           :locality    => response.get_type('locality').short_name,
           :region      => response.get_type('administrative_area_level_1').short_name,
