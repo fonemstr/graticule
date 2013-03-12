@@ -85,7 +85,7 @@ module Graticule #:nodoc:
       def parse_response(response) #:nodoc:
         #result = response.placemarks.first
         Location.new(
-          :latitude    => reponse.geo_location.location.lat,
+          :latitude    => response.geo_location.location.lat,
           :longitude   => response.geo_location.location.lng,
           :street      => response.get_type('route').short_name,
           :locality    => response.get_type('locality').short_name,
