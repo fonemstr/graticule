@@ -70,7 +70,9 @@ module Graticule #:nodoc:
         has_one :result, Result
        
         def get_type(type)
-          address_components.detect {|component|  component.types.first.name == type } 
+          address_components.detect do |component|
+            component.types.detect {|item|  item.name == type } 
+          end
         end
 
         def get_result_type
