@@ -83,7 +83,7 @@ module Graticule #:nodoc:
         end
 
         def locality
-          locality = get_type('locality') || get_type('sublocality')
+          locality = get_type('locality') || get_type('sublocality') || get_type('neighborhood')
           locality.presence ? locality.short_name : ''
         end
 
