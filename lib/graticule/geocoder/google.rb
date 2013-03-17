@@ -114,7 +114,6 @@ module Graticule #:nodoc:
 
         def precision
           precision = get_result_type
-          Rails.logger.info "#{precision}"
           PRECISION[precision.to_sym] || PRECISION[:locality]  
         end
       end
